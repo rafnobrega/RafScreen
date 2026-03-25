@@ -11,6 +11,7 @@ A native macOS app that mirrors your iPhone or iPad screen via USB, wrapped in a
 - **Auto-Detect** — Automatically identifies the connected device model by screen resolution
 - **Screenshot** — Save the current screen with bezel overlay as PNG (Cmd+S)
 - **Recording** — Record the mirrored screen to a .mov file (Cmd+R)
+- **Landscape Support** — Bezel automatically rotates when the device switches to landscape orientation
 - **Device Hot-Swap** — Seamlessly switch between devices without restarting
 - **Background Themes** — Dark, Black, Light, Gray, Sepia, and Green Screen (chroma key)
 - **Zoom Controls** — Resize the display to fit your workflow
