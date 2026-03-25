@@ -162,9 +162,13 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         snappedFrame.size.height = round(screenFrame.size.height * backingScale) / backingScale
         previewLayerContainer.frame = snappedFrame
 
-        let totalW = selectedModel.screenWidth + selectedModel.bezelWidth * 2
-        let totalH = selectedModel.screenHeight + selectedModel.bezelWidth * 2 +
-            (selectedModel.hasHomeButton ? 100 : 0)
+        let isLandscape = bezelView.isLandscape
+        let effW = isLandscape ? selectedModel.screenHeight : selectedModel.screenWidth
+        let effH = isLandscape ? selectedModel.screenWidth : selectedModel.screenHeight
+        let totalW = effW + selectedModel.bezelWidth * 2 +
+            (isLandscape && selectedModel.hasHomeButton ? 100 : 0)
+        let totalH = effH + selectedModel.bezelWidth * 2 +
+            (!isLandscape && selectedModel.hasHomeButton ? 100 : 0)
         let scale = min(
             bezelView.bounds.width / totalW,
             bezelView.bounds.height / totalH,
@@ -612,12 +616,20 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         nativeVideoWidth = CGFloat(width)
         nativeVideoHeight = CGFloat(height)
 
+        // Detect landscape orientation
+        let landscape = width > height
+        if bezelView.isLandscape != landscape {
+            bezelView.isLandscape = landscape
+            DispatchQueue.main.async { [weak self] in
+                self?.updatePreviewLayout()
+            }
+        }
+
         guard autoDetectEnabled else { return }
 
         if let model = DeviceModelStore.modelForResolution(width: width, height: height) {
             applyModel(model)
             selectModelInPopUp(model)
-            // Update the popup to show the detected model name instead of Auto-Detect
             if let popup = modelPopUp, let idx = popup.menu?.items.firstIndex(where: {
                 ($0.representedObject as? String) == model.name
             }) {

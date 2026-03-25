@@ -27,7 +27,8 @@ class DeviceCaptureManager: NSObject {
     private var videoOutput: AVCaptureVideoDataOutput?
     private var latestSampleBuffer: CMSampleBuffer?
     private let bufferQueue = DispatchQueue(label: "com.rnobrega.rafscreen.buffer")
-    private var hasReportedResolution = false
+    private var lastReportedWidth: Int = 0
+    private var lastReportedHeight: Int = 0
     private let ciContext = CIContext(options: [
         .useSoftwareRenderer: false,
         .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -150,7 +151,8 @@ class DeviceCaptureManager: NSObject {
 
     func startCapture(from device: AVCaptureDevice) {
         stopCapture()
-        hasReportedResolution = false
+        lastReportedWidth = 0
+        lastReportedHeight = 0
 
         let session = AVCaptureSession()
 
@@ -336,13 +338,18 @@ extension DeviceCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         latestSampleBuffer = sampleBuffer
 
-        // Report resolution on first frame
-        if !hasReportedResolution, let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
+        // Report resolution on first frame and on orientation changes
+        if let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
             let dims = CMVideoFormatDescriptionGetDimensions(formatDesc)
-            hasReportedResolution = true
-            DispatchQueue.main.async { [weak self] in
-                guard let self = self else { return }
-                self.delegate?.captureManager(self, didDetectResolution: Int(dims.width), height: Int(dims.height))
+            let w = Int(dims.width)
+            let h = Int(dims.height)
+            if w != lastReportedWidth || h != lastReportedHeight {
+                lastReportedWidth = w
+                lastReportedHeight = h
+                DispatchQueue.main.async { [weak self] in
+                    guard let self = self else { return }
+                    self.delegate?.captureManager(self, didDetectResolution: w, height: h)
+                }
             }
         }
 

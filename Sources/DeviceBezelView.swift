@@ -11,14 +11,22 @@ class DeviceBezelView: NSView {
         didSet { needsDisplay = true; invalidateIntrinsicContentSize() }
     }
 
+    var isLandscape: Bool = false {
+        didSet { needsDisplay = true; invalidateIntrinsicContentSize() }
+    }
+
+    // Effective dimensions accounting for orientation
+    private var effectiveScreenWidth: CGFloat { isLandscape ? deviceModel.screenHeight : deviceModel.screenWidth }
+    private var effectiveScreenHeight: CGFloat { isLandscape ? deviceModel.screenWidth : deviceModel.screenHeight }
+
     // The scale factor to fit the device in the view
     private var renderScale: CGFloat {
         let availableWidth = bounds.width
         let availableHeight = bounds.height
-        let totalDeviceWidth = deviceModel.screenWidth + deviceModel.bezelWidth * 2
-        let totalDeviceHeight = deviceModel.screenHeight + deviceModel.bezelWidth * 2 +
-            (deviceModel.hasHomeButton ? 60 : 0) + // home button area
-            (deviceModel.hasHomeButton ? 40 : 0)    // top bezel for home button models
+        let totalDeviceWidth = effectiveScreenWidth + deviceModel.bezelWidth * 2 +
+            (isLandscape && deviceModel.hasHomeButton ? 100 : 0)
+        let totalDeviceHeight = effectiveScreenHeight + deviceModel.bezelWidth * 2 +
+            (!isLandscape && deviceModel.hasHomeButton ? 100 : 0)
         let scaleX = availableWidth / totalDeviceWidth
         let scaleY = availableHeight / totalDeviceHeight
         return min(scaleX, scaleY, 1.0)
@@ -27,8 +35,7 @@ class DeviceBezelView: NSView {
     /// Returns the frame where the screen content should be placed (in this view's coordinate space)
     var screenContentFrame: CGRect {
         if hideBezel {
-            // Fill the view, maintaining aspect ratio
-            let ratio = deviceModel.aspectRatio
+            let ratio = isLandscape ? (1.0 / deviceModel.aspectRatio) : deviceModel.aspectRatio
             var w = bounds.width
             var h = w * ratio
             if h > bounds.height {
@@ -41,32 +48,49 @@ class DeviceBezelView: NSView {
         }
 
         let scale = renderScale
-        let deviceWidth = deviceModel.screenWidth * scale
-        let deviceHeight = deviceModel.screenHeight * scale
+        let screenW = effectiveScreenWidth * scale
+        let screenH = effectiveScreenHeight * scale
         let bezel = deviceModel.bezelWidth * scale
 
-        let totalWidth = deviceWidth + bezel * 2
-        let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
-        let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
-        let totalHeight = deviceHeight + bezel * 2 + topExtra + bottomExtra
+        if isLandscape {
+            let leftExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
+            let rightExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
+            let totalWidth = screenW + bezel * 2 + leftExtra + rightExtra
+            let totalHeight = screenH + bezel * 2
 
-        let originX = (bounds.width - totalWidth) / 2 + bezel
-        let originY: CGFloat
-        if isFlipped {
-            originY = (bounds.height - totalHeight) / 2 + bezel + topExtra
+            let originX = (bounds.width - totalWidth) / 2 + bezel + leftExtra
+            let originY = (bounds.height - totalHeight) / 2 + bezel
+            return CGRect(x: originX, y: originY, width: screenW, height: screenH)
         } else {
-            originY = (bounds.height - totalHeight) / 2 + bezel + bottomExtra
+            let totalWidth = screenW + bezel * 2
+            let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
+            let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
+            let totalHeight = screenH + bezel * 2 + topExtra + bottomExtra
+
+            let originX = (bounds.width - totalWidth) / 2 + bezel
+            let originY = (bounds.height - totalHeight) / 2 + bezel + topExtra
+            return CGRect(x: originX, y: originY, width: screenW, height: screenH)
         }
-        return CGRect(x: originX, y: originY, width: deviceWidth, height: deviceHeight)
     }
 
     override var isFlipped: Bool { true }
 
     override var intrinsicContentSize: NSSize {
-        let totalWidth = deviceModel.screenWidth + deviceModel.bezelWidth * 2
-        let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 : 0
-        let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 : 0
-        let totalHeight = deviceModel.screenHeight + deviceModel.bezelWidth * 2 + topExtra + bottomExtra
+        let sw = effectiveScreenWidth
+        let sh = effectiveScreenHeight
+        let totalWidth: CGFloat
+        let totalHeight: CGFloat
+        if isLandscape {
+            let leftExtra: CGFloat = deviceModel.hasHomeButton ? 40 : 0
+            let rightExtra: CGFloat = deviceModel.hasHomeButton ? 60 : 0
+            totalWidth = sw + deviceModel.bezelWidth * 2 + leftExtra + rightExtra
+            totalHeight = sh + deviceModel.bezelWidth * 2
+        } else {
+            let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 : 0
+            let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 : 0
+            totalWidth = sw + deviceModel.bezelWidth * 2
+            totalHeight = sh + deviceModel.bezelWidth * 2 + topExtra + bottomExtra
+        }
         return NSSize(width: totalWidth * 0.5, height: totalHeight * 0.5)
     }
 
@@ -86,16 +110,25 @@ class DeviceBezelView: NSView {
         }
 
         let scale = renderScale
-        let screenW = deviceModel.screenWidth * scale
-        let screenH = deviceModel.screenHeight * scale
+        let screenW = effectiveScreenWidth * scale
+        let screenH = effectiveScreenHeight * scale
         let bezel = deviceModel.bezelWidth * scale
         let cornerR = deviceModel.cornerRadius * scale
 
-        let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
-        let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
+        let totalW: CGFloat
+        let totalH: CGFloat
 
-        let totalW = screenW + bezel * 2
-        let totalH = screenH + bezel * 2 + topExtra + bottomExtra
+        if isLandscape {
+            let leftExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
+            let rightExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
+            totalW = screenW + bezel * 2 + leftExtra + rightExtra
+            totalH = screenH + bezel * 2
+        } else {
+            let topExtra: CGFloat = deviceModel.hasHomeButton ? 40 * scale : 0
+            let bottomExtra: CGFloat = deviceModel.hasHomeButton ? 60 * scale : 0
+            totalW = screenW + bezel * 2
+            totalH = screenH + bezel * 2 + topExtra + bottomExtra
+        }
 
         let startX = (bounds.width - totalW) / 2
         let startY = (bounds.height - totalH) / 2
@@ -139,22 +172,38 @@ class DeviceBezelView: NSView {
         screenPath.fill()
         ctx.restoreGState()
 
-        // Side button (power button on right side)
+        // Side buttons
         if deviceModel.category == .iPhone {
-            drawSideButtons(in: ctx, deviceRect: deviceRect, scale: scale)
+            if isLandscape {
+                drawSideButtonsLandscape(in: ctx, deviceRect: deviceRect, scale: scale)
+            } else {
+                drawSideButtons(in: ctx, deviceRect: deviceRect, scale: scale)
+            }
         }
 
         // Home button for older models
         if deviceModel.hasHomeButton {
-            drawHomeButton(in: ctx, deviceRect: deviceRect, scale: scale)
+            if isLandscape {
+                drawHomeButtonLandscape(in: ctx, deviceRect: deviceRect, scale: scale)
+            } else {
+                drawHomeButton(in: ctx, deviceRect: deviceRect, scale: scale)
+            }
         }
 
         // Notch or Dynamic Island
         switch deviceModel.notchStyle {
         case .notch:
-            drawNotch(in: ctx, screenRect: screenRect, scale: scale)
+            if isLandscape {
+                drawNotchLandscape(in: ctx, screenRect: screenRect, scale: scale)
+            } else {
+                drawNotch(in: ctx, screenRect: screenRect, scale: scale)
+            }
         case .dynamicIsland:
-            drawDynamicIsland(in: ctx, screenRect: screenRect, scale: scale)
+            if isLandscape {
+                drawDynamicIslandLandscape(in: ctx, screenRect: screenRect, scale: scale)
+            } else {
+                drawDynamicIsland(in: ctx, screenRect: screenRect, scale: scale)
+            }
         case .none, .iPadCamera:
             break
         }
@@ -304,6 +353,137 @@ class DeviceBezelView: NSView {
         ctx.addPath(path)
         ctx.setFillColor(NSColor(calibratedWhite: 0.12, alpha: 1.0).cgColor)
         ctx.fillPath()
+
+        ctx.restoreGState()
+    }
+
+    // MARK: - Landscape Drawing Helpers
+
+    private func drawSideButtonsLandscape(in ctx: CGContext, deviceRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+        let buttonColor = NSColor(calibratedWhite: 0.18, alpha: 1.0)
+        buttonColor.setFill()
+
+        // Power button (bottom in landscape = right side in portrait)
+        let powerHeight: CGFloat = 3 * scale
+        let powerWidth: CGFloat = 50 * scale
+        let powerX = deviceRect.minX + 120 * scale
+        let powerRect = CGRect(x: powerX, y: deviceRect.maxY, width: powerWidth, height: powerHeight)
+        NSBezierPath(roundedRect: powerRect, xRadius: 1.5 * scale, yRadius: 1.5 * scale).fill()
+
+        // Volume buttons (top in landscape = left side in portrait)
+        let volHeight: CGFloat = 3 * scale
+        let volWidth: CGFloat = 35 * scale
+
+        let volUpX = deviceRect.maxX - 100 * scale - volWidth
+        let volUpRect = CGRect(x: volUpX, y: deviceRect.minY - volHeight, width: volWidth, height: volHeight)
+        NSBezierPath(roundedRect: volUpRect, xRadius: 1.5 * scale, yRadius: 1.5 * scale).fill()
+
+        let volDownX = volUpX - volWidth - 10 * scale
+        let volDownRect = CGRect(x: volDownX, y: deviceRect.minY - volHeight, width: volWidth, height: volHeight)
+        NSBezierPath(roundedRect: volDownRect, xRadius: 1.5 * scale, yRadius: 1.5 * scale).fill()
+
+        // Silent switch
+        let silentX = deviceRect.maxX - 75 * scale - 18 * scale
+        let silentRect = CGRect(x: silentX, y: deviceRect.minY - volHeight, width: 18 * scale, height: volHeight)
+        NSBezierPath(roundedRect: silentRect, xRadius: 1.5 * scale, yRadius: 1.5 * scale).fill()
+
+        ctx.restoreGState()
+    }
+
+    private func drawHomeButtonLandscape(in ctx: CGContext, deviceRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+
+        let buttonRadius: CGFloat = 22 * scale
+        let centerX = deviceRect.maxX - 30 * scale
+        let centerY = deviceRect.midY
+
+        let buttonRect = CGRect(
+            x: centerX - buttonRadius,
+            y: centerY - buttonRadius,
+            width: buttonRadius * 2,
+            height: buttonRadius * 2
+        )
+
+        NSColor(calibratedWhite: 0.10, alpha: 1.0).setFill()
+        let buttonPath = NSBezierPath(ovalIn: buttonRect)
+        buttonPath.fill()
+
+        NSColor(calibratedWhite: 0.25, alpha: 1.0).setStroke()
+        buttonPath.lineWidth = 1.5 * scale
+        buttonPath.stroke()
+
+        let innerSize: CGFloat = 16 * scale
+        let innerRect = CGRect(
+            x: centerX - innerSize / 2,
+            y: centerY - innerSize / 2,
+            width: innerSize,
+            height: innerSize
+        )
+        NSColor(calibratedWhite: 0.20, alpha: 1.0).setStroke()
+        let innerPath = NSBezierPath(roundedRect: innerRect, xRadius: 4 * scale, yRadius: 4 * scale)
+        innerPath.lineWidth = 1.0 * scale
+        innerPath.stroke()
+
+        ctx.restoreGState()
+    }
+
+    private func drawNotchLandscape(in ctx: CGContext, screenRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+
+        // Notch on the left side (top in portrait → left in landscape)
+        let notchHeight: CGFloat = 160 * scale
+        let notchWidth: CGFloat = 34 * scale
+        let notchCornerR: CGFloat = 20 * scale
+
+        let notchX = screenRect.minX
+        let notchY = screenRect.midY - notchHeight / 2
+
+        let notchRect = CGRect(x: notchX, y: notchY, width: notchWidth, height: notchHeight)
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: notchRect.minX, y: notchRect.minY - 8 * scale))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX + 8 * scale, y: notchRect.minY),
+            control: CGPoint(x: notchRect.minX, y: notchRect.minY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX - notchCornerR, y: notchRect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX, y: notchRect.minY + notchCornerR),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.minY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX, y: notchRect.maxY - notchCornerR))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX - notchCornerR, y: notchRect.maxY),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.maxY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.minX + 8 * scale, y: notchRect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX, y: notchRect.maxY + 8 * scale),
+            control: CGPoint(x: notchRect.minX, y: notchRect.maxY)
+        )
+        path.closeSubpath()
+
+        ctx.addPath(path)
+        ctx.setFillColor(NSColor(calibratedWhite: 0.12, alpha: 1.0).cgColor)
+        ctx.fillPath()
+
+        ctx.restoreGState()
+    }
+
+    private func drawDynamicIslandLandscape(in ctx: CGContext, screenRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+
+        let islandHeight: CGFloat = 120 * scale
+        let islandWidth: CGFloat = 36 * scale
+        let islandX = screenRect.minX + 12 * scale
+        let islandY = screenRect.midY - islandHeight / 2
+
+        let islandRect = CGRect(x: islandX, y: islandY, width: islandWidth, height: islandHeight)
+        let islandPath = NSBezierPath(roundedRect: islandRect, xRadius: islandWidth / 2, yRadius: islandWidth / 2)
+
+        NSColor.black.setFill()
+        islandPath.fill()
 
         ctx.restoreGState()
     }
