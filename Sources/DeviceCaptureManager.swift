@@ -13,7 +13,7 @@ class DeviceCaptureManager: NSObject {
     weak var delegate: DeviceCaptureDelegate?
 
     private(set) var captureSession: AVCaptureSession?
-    private(set) var previewLayer: AVCaptureVideoPreviewLayer?
+    private(set) var displayLayer: CALayer?
     private(set) var connectedDevices: [AVCaptureDevice] = []
     private(set) var allDetectedDevices: [AVCaptureDevice] = []
     private(set) var activeDevice: AVCaptureDevice?
@@ -28,6 +28,15 @@ class DeviceCaptureManager: NSObject {
     private var latestSampleBuffer: CMSampleBuffer?
     private let bufferQueue = DispatchQueue(label: "com.rnobrega.rafscreen.buffer")
     private var hasReportedResolution = false
+    private let ciContext = CIContext(options: [
+        .useSoftwareRenderer: false,
+        .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
+        .outputColorSpace: CGColorSpace(name: CGColorSpace.sRGB)!
+    ])
+
+    // Display target size (set by MainWindowController)
+    var displayTargetSize: CGSize = .zero
+    var displayBackingScale: CGFloat = 2.0
 
     // Recording
     private(set) var isRecording = false
@@ -113,21 +122,17 @@ class DeviceCaptureManager: NSObject {
             self.allDetectedDevices = merged
             let iosDevices = merged.filter { DeviceCaptureManager.isIOSDevice($0) }
 
-            // Detect device changes for hot-swap support
             let previousIDs = Set(self.connectedDevices.map { $0.uniqueID })
             let currentIDs = Set(iosDevices.map { $0.uniqueID })
 
             self.connectedDevices = iosDevices
 
-            // If active device was disconnected, stop capture
             if let active = self.activeDevice, !currentIDs.contains(active.uniqueID) {
                 self.stopCapture()
             }
 
-            // If a new device appeared (hot-swap), auto-start capture
             let newDeviceIDs = currentIDs.subtracting(previousIDs)
             if !newDeviceIDs.isEmpty, self.activeDevice == nil {
-                // Small delay to let the device initialize
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                     self?.startCaptureFromFirstAvailableDevice()
                 }
@@ -149,26 +154,42 @@ class DeviceCaptureManager: NSObject {
 
         let session = AVCaptureSession()
 
-        if session.canSetSessionPreset(.hd1920x1080) {
-            session.sessionPreset = .hd1920x1080
-        } else {
-            session.sessionPreset = .high
-        }
-
         do {
             let input = try AVCaptureDeviceInput(device: device)
+
+            session.beginConfiguration()
             if session.canAddInput(input) {
                 session.addInput(input)
             } else {
+                session.commitConfiguration()
                 delegate?.captureManager(self, didStopSession: "Cannot add device as input")
                 return
             }
+
+            // Select the highest resolution format for best scaling quality
+            if let bestFormat = device.formats
+                .filter({ CMFormatDescriptionGetMediaType($0.formatDescription) == kCMMediaType_Video })
+                .max(by: { fmt1, fmt2 in
+                    let d1 = CMVideoFormatDescriptionGetDimensions(fmt1.formatDescription)
+                    let d2 = CMVideoFormatDescriptionGetDimensions(fmt2.formatDescription)
+                    return (Int(d1.width) * Int(d1.height)) < (Int(d2.width) * Int(d2.height))
+                }) {
+                try device.lockForConfiguration()
+                device.activeFormat = bestFormat
+                device.unlockForConfiguration()
+                let dims = CMVideoFormatDescriptionGetDimensions(bestFormat.formatDescription)
+                NSLog("RafScreen: Selected format %dx%d", dims.width, dims.height)
+            } else {
+                session.sessionPreset = .high
+            }
+
+            session.commitConfiguration()
         } catch {
             delegate?.captureManager(self, didStopSession: "Error: \(error.localizedDescription)")
             return
         }
 
-        // Add video data output for frame capture
+        // Video data output for frame rendering, screenshots, and recording
         let output = AVCaptureVideoDataOutput()
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA]
         output.setSampleBufferDelegate(self, queue: bufferQueue)
@@ -179,16 +200,13 @@ class DeviceCaptureManager: NSObject {
             self.videoOutput = output
         }
 
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspect
-
-        if let connection = layer.connection {
-            connection.automaticallyAdjustsVideoMirroring = false
-            connection.isVideoMirrored = false
-        }
+        // Manual CALayer for Lanczos-scaled frame rendering
+        let layer = CALayer()
+        layer.contentsGravity = .resizeAspect
+        layer.backgroundColor = NSColor.black.cgColor
 
         self.captureSession = session
-        self.previewLayer = layer
+        self.displayLayer = layer
         self.activeDevice = device
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -204,9 +222,9 @@ class DeviceCaptureManager: NSObject {
             stopRecording(completion: nil)
         }
         captureSession?.stopRunning()
-        previewLayer?.removeFromSuperlayer()
+        displayLayer?.removeFromSuperlayer()
         captureSession = nil
-        previewLayer = nil
+        displayLayer = nil
         videoOutput = nil
         activeDevice = nil
         latestSampleBuffer = nil
@@ -226,11 +244,10 @@ class DeviceCaptureManager: NSObject {
         }
 
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
 
-        guard let cgImage = context.createCGImage(ciImage, from: CGRect(x: 0, y: 0, width: width, height: height)) else {
+        guard let cgImage = ciContext.createCGImage(ciImage, from: CGRect(x: 0, y: 0, width: width, height: height)) else {
             return nil
         }
 
@@ -249,7 +266,6 @@ class DeviceCaptureManager: NSObject {
         let desktopURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first!
         let fileURL = desktopURL.appendingPathComponent(filename)
 
-        // Get resolution from latest frame
         var width = 1170
         var height = 2532
         if let buffer = latestSampleBuffer, let pixelBuffer = CMSampleBufferGetImageBuffer(buffer) {
@@ -318,16 +334,46 @@ class DeviceCaptureManager: NSObject {
 
 extension DeviceCaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        // Store latest frame for screenshots
         latestSampleBuffer = sampleBuffer
 
-        // Report resolution on first frame for auto-detect
+        // Report resolution on first frame
         if !hasReportedResolution, let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) {
             let dims = CMVideoFormatDescriptionGetDimensions(formatDesc)
             hasReportedResolution = true
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.delegate?.captureManager(self, didDetectResolution: Int(dims.width), height: Int(dims.height))
+            }
+        }
+
+        // Render frame to display layer using Lanczos scaling
+        if let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer),
+           displayTargetSize.width > 0, displayTargetSize.height > 0 {
+
+            let sourceWidth = CGFloat(CVPixelBufferGetWidth(pixelBuffer))
+            let sourceHeight = CGFloat(CVPixelBufferGetHeight(pixelBuffer))
+
+            // Calculate target size in backing pixels, maintaining aspect ratio
+            let targetW = displayTargetSize.width * displayBackingScale
+            let targetH = displayTargetSize.height * displayBackingScale
+            let scaleToFit = min(targetW / sourceWidth, targetH / sourceHeight)
+
+            var ciImage = CIImage(cvPixelBuffer: pixelBuffer)
+
+            // Apply Lanczos scale transform for high-quality resampling
+            ciImage = ciImage.applyingFilter("CILanczosScaleTransform", parameters: [
+                "inputScale": scaleToFit,
+                "inputAspectRatio": 1.0
+            ])
+
+            let outputRect = ciImage.extent
+            if let cgImage = ciContext.createCGImage(ciImage, from: outputRect) {
+                DispatchQueue.main.async { [weak self] in
+                    CATransaction.begin()
+                    CATransaction.setDisableActions(true)
+                    self?.displayLayer?.contents = cgImage
+                    CATransaction.commit()
+                }
             }
         }
 

@@ -33,6 +33,8 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     private var selectedModel: DeviceModel = DeviceModelStore.defaultModel()
     private var selectedBackground: BackgroundTheme = .dark
     private var autoDetectEnabled = true
+    private var nativeVideoWidth: CGFloat = 0
+    private var nativeVideoHeight: CGFloat = 0
 
     private var devicePopUp: NSPopUpButton!
     private var modelPopUp: NSPopUpButton!
@@ -150,7 +152,15 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
 
     private func updatePreviewLayout() {
         let screenFrame = bezelView.screenContentFrame
-        previewLayerContainer.frame = screenFrame
+        let backingScale = window?.backingScaleFactor ?? 2.0
+
+        // Snap to pixel-aligned boundaries to avoid fractional scaling artifacts
+        var snappedFrame = screenFrame
+        snappedFrame.origin.x = round(screenFrame.origin.x * backingScale) / backingScale
+        snappedFrame.origin.y = round(screenFrame.origin.y * backingScale) / backingScale
+        snappedFrame.size.width = round(screenFrame.size.width * backingScale) / backingScale
+        snappedFrame.size.height = round(screenFrame.size.height * backingScale) / backingScale
+        previewLayerContainer.frame = snappedFrame
 
         let totalW = selectedModel.screenWidth + selectedModel.bezelWidth * 2
         let totalH = selectedModel.screenHeight + selectedModel.bezelWidth * 2 +
@@ -166,9 +176,14 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        if let layer = captureManager.previewLayer {
+        if let layer = captureManager.displayLayer {
+            layer.contentsScale = backingScale
+            layer.contentsGravity = .resizeAspect
             layer.frame = previewLayerContainer.bounds
         }
+        // Update the target size so Lanczos scaling renders at exact display resolution
+        captureManager.displayTargetSize = previewLayerContainer.bounds.size
+        captureManager.displayBackingScale = backingScale
         CATransaction.commit()
     }
 
@@ -551,10 +566,9 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
             noDeviceLabel?.isHidden = false
             noDeviceLabel?.stringValue = "Connect an iOS device via USB"
             statusLabel?.stringValue = ""
-            captureManager.previewLayer?.removeFromSuperlayer()
+            captureManager.displayLayer?.removeFromSuperlayer()
         } else {
             noDeviceLabel?.stringValue = "Starting capture..."
-            statusLabel?.stringValue = "Device detected: \(devices.first?.localizedName ?? "")"
 
             if manager.activeDevice == nil {
                 manager.startCaptureFromFirstAvailableDevice()
@@ -571,11 +585,17 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         let screenFrame = bezelView.screenContentFrame
         previewLayerContainer.frame = screenFrame
 
-        if let layer = manager.previewLayer {
+        if let layer = manager.displayLayer {
+            let backingScale = window?.backingScaleFactor ?? 2.0
+            layer.contentsScale = backingScale
+            layer.contentsGravity = .resizeAspect
             layer.frame = previewLayerContainer.bounds
-            layer.videoGravity = .resizeAspectFill
             previewLayerContainer.layer?.addSublayer(layer)
+
+            captureManager.displayTargetSize = previewLayerContainer.bounds.size
+            captureManager.displayBackingScale = backingScale
         }
+
 
         DispatchQueue.main.async { [weak self] in
             self?.updatePreviewLayout()
@@ -589,6 +609,9 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     }
 
     func captureManager(_ manager: DeviceCaptureManager, didDetectResolution width: Int, height: Int) {
+        nativeVideoWidth = CGFloat(width)
+        nativeVideoHeight = CGFloat(height)
+
         guard autoDetectEnabled else { return }
 
         if let model = DeviceModelStore.modelForResolution(width: width, height: height) {
