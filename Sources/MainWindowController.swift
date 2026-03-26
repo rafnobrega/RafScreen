@@ -49,6 +49,7 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     private let toolbarModelIdentifier = NSToolbarItem.Identifier("model")
     private let toolbarBackgroundIdentifier = NSToolbarItem.Identifier("background")
     private let toolbarRecordIdentifier = NSToolbarItem.Identifier("record")
+    private let toolbarScreenshotIdentifier = NSToolbarItem.Identifier("screenshot")
     private let toolbarHelpIdentifier = NSToolbarItem.Identifier("help")
 
     // MARK: - Init
@@ -288,6 +289,18 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
             item.maxSize = NSSize(width: 160, height: 24)
             return item
 
+        case toolbarScreenshotIdentifier:
+            let item = NSToolbarItem(itemIdentifier: itemIdentifier)
+            let screenshotButton = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 24))
+            screenshotButton.bezelStyle = .texturedRounded
+            screenshotButton.image = NSImage(systemSymbolName: "camera", accessibilityDescription: "Screenshot")
+            screenshotButton.target = self
+            screenshotButton.action = #selector(takeScreenshot)
+            screenshotButton.toolTip = "Save Screenshot (Cmd+S)"
+            item.view = screenshotButton
+            item.label = "Screenshot"
+            return item
+
         case toolbarRecordIdentifier:
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             recordButton = NSButton(frame: NSRect(x: 0, y: 0, width: 28, height: 24))
@@ -328,10 +341,11 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
         return [
             toolbarDeviceIdentifier,
+            toolbarScreenshotIdentifier,
+            toolbarRecordIdentifier,
             .flexibleSpace,
             toolbarModelIdentifier,
             toolbarBackgroundIdentifier,
-            toolbarRecordIdentifier,
             toolbarHelpIdentifier,
         ]
     }
