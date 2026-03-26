@@ -29,6 +29,7 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     private let bezelView = DeviceBezelView()
     private let contentContainerView = NSView()
     private var previewLayerContainer = NSView()
+    private let notchOverlay = ScreenNotchOverlayView()
 
     private var selectedModel: DeviceModel = DeviceModelStore.defaultModel()
     private var selectedBackground: BackgroundTheme = .dark
@@ -110,6 +111,14 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         previewLayerContainer.autoresizingMask = []
         bezelView.addSubview(previewLayerContainer)
 
+        notchOverlay.translatesAutoresizingMaskIntoConstraints = true
+        notchOverlay.wantsLayer = true
+        notchOverlay.layer?.backgroundColor = NSColor.clear.cgColor
+        notchOverlay.layer?.isOpaque = false
+        notchOverlay.deviceModel = selectedModel
+        notchOverlay.autoresizingMask = []
+        bezelView.addSubview(notchOverlay, positioned: .above, relativeTo: previewLayerContainer)
+
         noDeviceLabel = NSTextField(labelWithString: "Connect an iOS device via USB")
         noDeviceLabel.translatesAutoresizingMaskIntoConstraints = false
         noDeviceLabel.font = NSFont.systemFont(ofSize: 16, weight: .medium)
@@ -178,6 +187,11 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         let cornerR = selectedModel.cornerRadius * max(scale, 0.01)
         previewLayerContainer.layer?.cornerRadius = cornerR
         previewLayerContainer.layer?.masksToBounds = true
+
+        // Position notch overlay to match the screen content frame
+        notchOverlay.frame = snappedFrame
+        notchOverlay.layer?.cornerRadius = cornerR
+        notchOverlay.layer?.masksToBounds = true
 
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -359,6 +373,7 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     @objc func autoDetectSelected() {
         autoDetectEnabled = true
         bezelView.hideBezel = false
+        notchOverlay.isHidden = false
         captureManager.refreshDevices()
     }
 
@@ -372,6 +387,7 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
     private func applyModel(_ model: DeviceModel) {
         selectedModel = model
         bezelView.deviceModel = model
+        notchOverlay.deviceModel = model
         DispatchQueue.main.async { [weak self] in
             self?.updatePreviewLayout()
         }
@@ -493,6 +509,16 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         // Draw screen content
         let screenFrame = bezelView.screenContentFrame
         screenImage.draw(in: screenFrame, from: .zero, operation: .sourceOver, fraction: 1.0)
+
+        // Draw notch/island overlay on top of screen content
+        if let ctx = NSGraphicsContext.current {
+            ctx.saveGraphicsState()
+            let transform = NSAffineTransform()
+            transform.translateX(by: screenFrame.origin.x, yBy: screenFrame.origin.y)
+            transform.concat()
+            notchOverlay.draw(CGRect(origin: .zero, size: screenFrame.size))
+            ctx.restoreGraphicsState()
+        }
 
         image.unlockFocus()
         return image
@@ -634,6 +660,7 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
         let landscape = width > height
         if bezelView.isLandscape != landscape {
             bezelView.isLandscape = landscape
+            notchOverlay.isLandscape = landscape
             DispatchQueue.main.async { [weak self] in
                 self?.updatePreviewLayout()
             }
@@ -641,7 +668,19 @@ class MainWindowController: NSWindowController, NSToolbarDelegate, DeviceCapture
 
         guard autoDetectEnabled else { return }
 
-        if let model = DeviceModelStore.modelForResolution(width: width, height: height) {
+        // Normalize to portrait dimensions for consistent model detection
+        let portraitW = min(width, height)
+        let portraitH = max(width, height)
+
+        // Skip re-detection if portrait-normalized resolution hasn't changed
+        // (orientation change on same device shouldn't switch models)
+        let currentNativeW = selectedModel.nativeWidth
+        let currentNativeH = selectedModel.nativeHeight
+        if portraitW == currentNativeW && portraitH == currentNativeH {
+            return
+        }
+
+        if let model = DeviceModelStore.modelForResolution(width: portraitW, height: portraitH) {
             applyModel(model)
             selectModelInPopUp(model)
             if let popup = modelPopUp, let idx = popup.menu?.items.firstIndex(where: {

@@ -1,6 +1,218 @@
 import AppKit
 import CoreGraphics
 
+/// Transparent overlay that draws the notch or Dynamic Island on top of the video content
+class ScreenNotchOverlayView: NSView {
+    var deviceModel: DeviceModel = DeviceModelStore.defaultModel() {
+        didSet { needsDisplay = true }
+    }
+
+    var isLandscape: Bool = false {
+        didSet { needsDisplay = true }
+    }
+
+    override var isFlipped: Bool { true }
+    override var isOpaque: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let ctx = NSGraphicsContext.current?.cgContext else { return }
+
+        // Calculate scale based on screen dimensions vs view bounds
+        let effW = isLandscape ? deviceModel.screenHeight : deviceModel.screenWidth
+        let effH = isLandscape ? deviceModel.screenWidth : deviceModel.screenHeight
+        let scaleX = bounds.width / effW
+        let scaleY = bounds.height / effH
+        let scale = min(scaleX, scaleY)
+
+        switch deviceModel.notchStyle {
+        case .notch:
+            if isLandscape {
+                drawNotchLandscape(in: ctx, scale: scale)
+            } else {
+                drawNotch(in: ctx, scale: scale)
+            }
+        case .dynamicIsland:
+            if isLandscape {
+                drawDynamicIslandLandscape(in: ctx, scale: scale)
+            } else {
+                drawDynamicIsland(in: ctx, scale: scale)
+            }
+        case .iPadCamera:
+            if isLandscape {
+                drawIPadCameraLandscape(in: ctx, scale: scale)
+            } else {
+                drawIPadCamera(in: ctx, scale: scale)
+            }
+        case .none:
+            break
+        }
+    }
+
+    private func drawNotch(in ctx: CGContext, scale: CGFloat) {
+        ctx.saveGState()
+
+        let notchWidth: CGFloat = 160 * scale
+        let notchHeight: CGFloat = 34 * scale
+        let notchCornerR: CGFloat = 20 * scale
+
+        let notchX = bounds.midX - notchWidth / 2
+        let notchY: CGFloat = 0
+
+        let notchRect = CGRect(x: notchX, y: notchY, width: notchWidth, height: notchHeight)
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: notchRect.minX - 8 * scale, y: notchRect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX, y: notchRect.minY + 8 * scale),
+            control: CGPoint(x: notchRect.minX, y: notchRect.minY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.minX, y: notchRect.maxY - notchCornerR))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX + notchCornerR, y: notchRect.maxY),
+            control: CGPoint(x: notchRect.minX, y: notchRect.maxY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX - notchCornerR, y: notchRect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX, y: notchRect.maxY - notchCornerR),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.maxY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX, y: notchRect.minY + 8 * scale))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX + 8 * scale, y: notchRect.minY),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.minY)
+        )
+        path.closeSubpath()
+
+        ctx.addPath(path)
+        ctx.setFillColor(NSColor(calibratedWhite: 0.12, alpha: 1.0).cgColor)
+        ctx.fillPath()
+
+        ctx.restoreGState()
+    }
+
+    private func drawNotchLandscape(in ctx: CGContext, scale: CGFloat) {
+        ctx.saveGState()
+
+        let notchHeight: CGFloat = 160 * scale
+        let notchWidth: CGFloat = 34 * scale
+        let notchCornerR: CGFloat = 20 * scale
+
+        let notchX: CGFloat = 0
+        let notchY = bounds.midY - notchHeight / 2
+
+        let notchRect = CGRect(x: notchX, y: notchY, width: notchWidth, height: notchHeight)
+
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: notchRect.minX, y: notchRect.minY - 8 * scale))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX + 8 * scale, y: notchRect.minY),
+            control: CGPoint(x: notchRect.minX, y: notchRect.minY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX - notchCornerR, y: notchRect.minY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX, y: notchRect.minY + notchCornerR),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.minY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.maxX, y: notchRect.maxY - notchCornerR))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.maxX - notchCornerR, y: notchRect.maxY),
+            control: CGPoint(x: notchRect.maxX, y: notchRect.maxY)
+        )
+        path.addLine(to: CGPoint(x: notchRect.minX + 8 * scale, y: notchRect.maxY))
+        path.addQuadCurve(
+            to: CGPoint(x: notchRect.minX, y: notchRect.maxY + 8 * scale),
+            control: CGPoint(x: notchRect.minX, y: notchRect.maxY)
+        )
+        path.closeSubpath()
+
+        ctx.addPath(path)
+        ctx.setFillColor(NSColor(calibratedWhite: 0.12, alpha: 1.0).cgColor)
+        ctx.fillPath()
+
+        ctx.restoreGState()
+    }
+
+    private func drawDynamicIsland(in ctx: CGContext, scale: CGFloat) {
+        ctx.saveGState()
+
+        let islandWidth: CGFloat = 120 * scale
+        let islandHeight: CGFloat = 36 * scale
+        let islandY: CGFloat = 12 * scale
+        let islandX = bounds.midX - islandWidth / 2
+
+        let islandRect = CGRect(x: islandX, y: islandY, width: islandWidth, height: islandHeight)
+        let islandPath = NSBezierPath(roundedRect: islandRect, xRadius: islandHeight / 2, yRadius: islandHeight / 2)
+
+        NSColor.black.setFill()
+        islandPath.fill()
+
+        ctx.restoreGState()
+    }
+
+    private func drawDynamicIslandLandscape(in ctx: CGContext, scale: CGFloat) {
+        ctx.saveGState()
+
+        let islandHeight: CGFloat = 120 * scale
+        let islandWidth: CGFloat = 36 * scale
+        let islandX: CGFloat = 12 * scale
+        let islandY = bounds.midY - islandHeight / 2
+
+        let islandRect = CGRect(x: islandX, y: islandY, width: islandWidth, height: islandHeight)
+        let islandPath = NSBezierPath(roundedRect: islandRect, xRadius: islandWidth / 2, yRadius: islandWidth / 2)
+
+        NSColor.black.setFill()
+        islandPath.fill()
+
+        ctx.restoreGState()
+    }
+
+    private func drawIPadCamera(in ctx: CGContext, scale: CGFloat) {
+        // iPad camera is on the right side in portrait (landscape top edge)
+        // Draw a small camera lens circle on the right edge, centered vertically
+        ctx.saveGState()
+
+        let cameraSize: CGFloat = 12 * scale
+        let cameraX = bounds.maxX - 20 * scale
+        let cameraY = bounds.midY
+
+        let cameraRect = CGRect(x: cameraX - cameraSize / 2, y: cameraY - cameraSize / 2,
+                                width: cameraSize, height: cameraSize)
+        let cameraPath = NSBezierPath(ovalIn: cameraRect)
+
+        NSColor(calibratedWhite: 0.08, alpha: 1.0).setFill()
+        cameraPath.fill()
+
+        // Subtle lens ring
+        NSColor(calibratedWhite: 0.2, alpha: 0.6).setStroke()
+        cameraPath.lineWidth = 1.0 * scale
+        cameraPath.stroke()
+
+        ctx.restoreGState()
+    }
+
+    private func drawIPadCameraLandscape(in ctx: CGContext, scale: CGFloat) {
+        // iPad camera is at the top edge when in landscape
+        ctx.saveGState()
+
+        let cameraSize: CGFloat = 12 * scale
+        let cameraX = bounds.midX
+        let cameraY: CGFloat = 20 * scale
+
+        let cameraRect = CGRect(x: cameraX - cameraSize / 2, y: cameraY - cameraSize / 2,
+                                width: cameraSize, height: cameraSize)
+        let cameraPath = NSBezierPath(ovalIn: cameraRect)
+
+        NSColor(calibratedWhite: 0.08, alpha: 1.0).setFill()
+        cameraPath.fill()
+
+        NSColor(calibratedWhite: 0.2, alpha: 0.6).setStroke()
+        cameraPath.lineWidth = 1.0 * scale
+        cameraPath.stroke()
+
+        ctx.restoreGState()
+    }
+}
+
 /// Renders a device bezel frame around the video content
 class DeviceBezelView: NSView {
     var deviceModel: DeviceModel = DeviceModelStore.defaultModel() {
@@ -204,7 +416,13 @@ class DeviceBezelView: NSView {
             } else {
                 drawDynamicIsland(in: ctx, screenRect: screenRect, scale: scale)
             }
-        case .none, .iPadCamera:
+        case .iPadCamera:
+            if isLandscape {
+                drawIPadCameraBezelLandscape(in: ctx, deviceRect: deviceRect, scale: scale)
+            } else {
+                drawIPadCameraBezel(in: ctx, deviceRect: deviceRect, scale: scale)
+            }
+        case .none:
             break
         }
     }
@@ -501,6 +719,48 @@ class DeviceBezelView: NSView {
 
         NSColor.black.setFill()
         islandPath.fill()
+
+        ctx.restoreGState()
+    }
+
+    private func drawIPadCameraBezel(in ctx: CGContext, deviceRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+
+        let cameraSize: CGFloat = 12 * scale
+        let cameraX = deviceRect.maxX - deviceModel.bezelWidth * scale / 2
+        let cameraY = deviceRect.midY
+
+        let cameraRect = CGRect(x: cameraX - cameraSize / 2, y: cameraY - cameraSize / 2,
+                                width: cameraSize, height: cameraSize)
+        let cameraPath = NSBezierPath(ovalIn: cameraRect)
+
+        NSColor(calibratedWhite: 0.08, alpha: 1.0).setFill()
+        cameraPath.fill()
+
+        NSColor(calibratedWhite: 0.2, alpha: 0.6).setStroke()
+        cameraPath.lineWidth = 1.0 * scale
+        cameraPath.stroke()
+
+        ctx.restoreGState()
+    }
+
+    private func drawIPadCameraBezelLandscape(in ctx: CGContext, deviceRect: CGRect, scale: CGFloat) {
+        ctx.saveGState()
+
+        let cameraSize: CGFloat = 12 * scale
+        let cameraX = deviceRect.midX
+        let cameraY = deviceRect.minY + deviceModel.bezelWidth * scale / 2
+
+        let cameraRect = CGRect(x: cameraX - cameraSize / 2, y: cameraY - cameraSize / 2,
+                                width: cameraSize, height: cameraSize)
+        let cameraPath = NSBezierPath(ovalIn: cameraRect)
+
+        NSColor(calibratedWhite: 0.08, alpha: 1.0).setFill()
+        cameraPath.fill()
+
+        NSColor(calibratedWhite: 0.2, alpha: 0.6).setStroke()
+        cameraPath.lineWidth = 1.0 * scale
+        cameraPath.stroke()
 
         ctx.restoreGState()
     }

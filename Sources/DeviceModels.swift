@@ -199,13 +199,14 @@ struct DeviceModelStore {
     }
 
     /// Auto-detect the best matching device model based on native pixel resolution
+    /// When multiple models share a resolution, prefer the newest (last in array)
     static func modelForResolution(width: Int, height: Int) -> DeviceModel? {
-        // Try exact match first
-        if let exact = allModels.first(where: { $0.nativeWidth == width && $0.nativeHeight == height }) {
+        // Try exact match — use .last to prefer newer models when resolutions overlap
+        if let exact = allModels.last(where: { $0.nativeWidth == width && $0.nativeHeight == height }) {
             return exact
         }
         // Try swapped (landscape)
-        if let swapped = allModels.first(where: { $0.nativeWidth == height && $0.nativeHeight == width }) {
+        if let swapped = allModels.last(where: { $0.nativeWidth == height && $0.nativeHeight == width }) {
             return swapped
         }
         // Find closest match by aspect ratio
