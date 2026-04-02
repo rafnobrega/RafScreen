@@ -29,9 +29,8 @@ A native macOS app that mirrors your iPhone or iPad screen via USB, wrapped in a
 
 ### Option 1: Download the DMG (Recommended)
 
-1. Go to the [Releases](https://github.com/rafnobrega/RafScreen/releases) page
-2. Download the latest `.dmg` file
-3. Open the DMG and drag **RafScreen.app** to your Applications folder
+1. Download the `.dmg` file from the [`dist/`](https://github.com/rafnobrega/RafScreen/tree/main/dist) folder
+2. Open the DMG and drag **RafScreen.app** to your Applications folder
 4. Double-click to launch
 
 > ⚠️ **Heads up:** Since RafScreen is not signed with an Apple Developer certificate, macOS will probably block it the first time. Just go to **System Settings > Privacy & Security**, scroll down, and hit **Open Anyway**. After that, it won't bug you again.
