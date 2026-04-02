@@ -2,9 +2,13 @@
 
 A native macOS app that mirrors your iPhone or iPad screen via USB, wrapped in a beautiful device bezel frame. Built with Swift and AppKit using CoreMediaIO + AVFoundation.
 
+<p align="center">
+  <img src="assets/screenshot.png" alt="RafScreen" width="500"/>
+</p>
+
 ![RafScreen](https://img.shields.io/badge/platform-macOS%2013%2B-blue) ![Swift](https://img.shields.io/badge/swift-5.9-orange)
 
-## Features
+## ✨ Features
 
 - **Screen Mirroring** — Mirror any connected iOS device screen in real-time via USB
 - **Device Bezels** — 40+ programmatically rendered device frames (iPhone 8 through iPhone 17 Pro Max, iPads)
@@ -16,7 +20,7 @@ A native macOS app that mirrors your iPhone or iPad screen via USB, wrapped in a
 - **Background Themes** — Dark, Black, Light, Gray, Sepia, and Green Screen (chroma key)
 - **Zoom Controls** — Resize the display to fit your workflow
 
-## Getting Started
+## 🚀 Getting Started
 
 ### Requirements
 
@@ -40,14 +44,14 @@ open build/RafScreen.app
 
 Or double-click `RafScreen.app` in Finder.
 
-### Connect Your Device
+### 📱 Connect Your Device
 
 1. Plug your iPhone or iPad into your Mac via USB (Lightning or USB-C)
 2. Unlock the device
 3. Tap **Trust** on the "Trust This Computer?" prompt if it appears
 4. RafScreen will automatically detect the device and start mirroring
 
-## Keyboard Shortcuts
+## ⌨️ Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
@@ -58,7 +62,7 @@ Or double-click `RafScreen.app` in Finder.
 | Cmd+- | Zoom out |
 | Cmd+Q | Quit |
 
-## Supported Devices
+## 📋 Supported Devices
 
 ### iPhones
 iPhone 8, SE (2nd/3rd gen), X, XS, XR, 11 series, 12 series, 13 series, 14 series, 15 series, 16 series, 17 series
@@ -66,10 +70,10 @@ iPhone 8, SE (2nd/3rd gen), X, XS, XR, 11 series, 12 series, 13 series, 14 serie
 ### iPads
 iPad (8th gen), iPad Mini, iPad Air (3rd/4th gen), iPad Pro 9.7"/10.5"/11"/12.9" (multiple generations)
 
-## How It Works
+## ⚙️ How It Works
 
 RafScreen uses Apple's CoreMediaIO framework to enable iOS device screen capture over USB. Connected iOS devices appear as AVFoundation capture devices with muxed (audio+video) media type. The app reads the native pixel resolution from the video stream to auto-detect the device model and render the matching bezel using CoreGraphics.
 
-## License
+## 📄 License
 
 MIT
