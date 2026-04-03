@@ -3,7 +3,7 @@
 A native macOS app that mirrors your iPhone or iPad screen via USB, wrapped in a beautiful device bezel frame. Built with Swift and AppKit using CoreMediaIO + AVFoundation.
 
 <p align="center">
-  <img src="assets/screenshot.png" alt="RafScreen" width="500"/>
+  <img src="RafScreen.gif" alt="RafScreen Demo" width="500"/>
 </p>
 
 ![RafScreen](https://img.shields.io/badge/platform-macOS%2013%2B-blue) ![Swift](https://img.shields.io/badge/swift-5.9-orange)
